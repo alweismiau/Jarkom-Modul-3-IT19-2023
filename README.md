@@ -269,13 +269,170 @@ service isc-dhcp-server restart → service isc-dhcp-server status
 ![](https://cdn.discordapp.com/attachments/1025213238763327683/1176011612751134907/image.png?ex=656d5129&is=655adc29&hm=1ff1ac1e1df18931d993020cf733955cd4b63fd4e4f31178773bd48784a22d4b&)
 
 # Soal 6
+> Pada masing-masing worker PHP, lakukan konfigurasi virtual host untuk website berikut dengan menggunakan php 7.3
+
 ## Jawaban
+Sebelum menjalankan nomor 6-12 diharuskan untuk melakukan [setup](#setup) terlebih dahulu, terutama untuk bagian worker PHP.
+
+Jika sudah, buat file konfigurasi untuk website dengan diberi nama ```granz.channel.it19.com``` di ```/etc/nginx/sites-available/```, seperti di bawah.
+
+```
+server {
+    listen 80;
+    server_name _;
+
+    root /var/www/granz.channel.it19.com;
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php7.3-fpm.sock;  # Sesuaikan versi PHP dan socket
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+```
+
+Jangan lupa untuk ```service nginx restart``` dan menambahkan symbolic-link ke ```/etc/nginx/sites-enabled/```.
+
+Jika dicoba untuk akses salah satu worker dengan ```lynx 10.73.3.1```, maka akan tampil seperti berikut:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/4f79ef7f-6e4c-4f29-b93f-d6707854d511)
+(Gambar di atas di-capture dari cmd Windows)
 
 # Soal 7
+> Kepala suku dari Bredt Region memberikan resource server sebagai berikut -> Lawine (4GB, 2vCPU, dan 80 GB SSD), Linie (2GB, 2vCPU, dan 50 GB SSD), Lugner (1GB, 1vCPU, dan 25 GB SSD). Aturlah agar Eisen dapat bekerja dengan maksimal, lalu lakukan testing dengan 1000. request dan 100 request/second.
+
 ## Jawaban
 
-# Soal 8 
+Berganti ke Eisen, buat file ```/etc/nginx/sites-available/granz.channel.it19.com```. Setelahnya dibuat symbolic link ke ```/etc/nginx/sites-enabled/```. Berikut adalah isi file konfigurasi.
+
+```
+upstream workers {
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+
+server {
+        listen 80;
+        listen 81;
+        listen 82;
+
+        server_name granz.channel.it19.com www.granz.channel.it19.com;
+
+        location / {
+                proxy_pass http://workers;
+        }
+}
+```
+
+Untuk men-simulasikan spek yang ditentukan dalam soal. Dapat digunakan ```weight``` untuk menentukan skala beban kerja yang diterima salah satu atau lebih worker. Contohnya seperti di bawah:
+
+```
+upstream workers {
+        server 10.73.3.1 weight=1;
+        server 10.73.3.2 weight=3;
+        server 10.73.3.3 weight=4;
+}
+
+server {
+        listen 80;
+        listen 81;
+        listen 82;
+
+        server_name granz.channel.it19.com www.granz.channel.it19.com;
+
+        location / {
+                proxy_pass http://workers;
+        }
+}
+```
+
+Karena Lawine memiliki spek teratas, maka untuk men-simulasikannya perlu diberikan weight yang lebih kecil untuk melihat seolah-olah Lawine memiliki sumberdaya yang lebih banyak.
+
+Hasil testing 1000 request dan 100 request concurrent:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/99012a06-c53f-415c-aab4-220aca076bc2)
+
+
+# Soal 8
+> Karena diminta untuk menuliskan grimoire, buatlah analisis hasil testing dengan 200 request dan 10 request/second masing-masing algoritma Load Balancer dengan ketentuan sebagai berikut -> Nama Algoritma Load Balancer, Report hasil testing pada Apache Benchmark, Grafik request per second untuk masing masing algoritma, dan analisis.
+
 ## Jawaban
+Untuk melakukan testing dengan beberapa algoritma yang berbeda, perlu dilakukan pengubahan konfigurasi beberapa kali pada node Eisen sebagai load balancer.
+
+Berikut adalah cuplikan dari konfigurasi tambahan yang perlu ditambahkan pada file ```/etc/nginx/sites-available/granz.channel.it19.com```.
+
+### Setup Least Connection
+```
+upstream workers {
+	least_conn;
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+...
+...
+```
+
+### Setup IP Hash
+```
+upstream workers {
+	ip_hash;
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+...
+...
+```
+
+### Setup Generic Hash
+```
+upstream workers {
+	hash $host$request_uri;
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+...
+...
+```
+
+Untuk setiap perubahan skrip, diharuskan untuk menjalankan ```service nginx restart```
+
+Berikut adalah hasil testing dari tiap algoritma load-balancing dan analisis dari keseluruhan testing:
+
+### Round Robin
+
+![rr](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/9ca4dec1-cb32-4364-bc02-e9560fd5dbd9)
+
+
+### Least Connection
+
+![lc](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/ac9d6e8f-9de4-4e10-941d-e663df48b19d)
+
+
+### IP Hash
+
+![iphash](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/2f753324-7f61-47c1-860a-8cbbae8e672e)
+
+
+### Generic Hash
+
+![ghash](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/9b3359e0-7349-4280-8314-42d7bac821fb)
+
+
+### Grafik Request/s
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/de294e7f-6fe8-4592-ab41-dfe70c061b00)
+
+
 
 # Soal 9 
 ## Jawaban
@@ -839,3 +996,10 @@ Setelahnya, dilakukan testing dengan menggunakan command:
 ```ab -n 100 -c 10 -p login.json -T application/json http://www.riegel.canyon.it19.com/api/auth/login```
 
 Gambaran htop saat melakukan testing:
+
+![Screenshot (873)](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/db75d5aa-b223-45ab-80f8-5e5033cbf637)
+
+
+
+## Analisis 19 dan 20
+> Dalam kasus testing efisiensi pembagian beban kerja dengan algoritma dan spek yang telah ditentukan pada nomor 19 dan 20 seperti yang terlihat pada grafik ```htop``` tiap worker, penulis berasumsi bahwa hal yang membuat perubahan-perubahan variabel dan algoritma tidak terlihat signifikan dikarenakan keterbatasan spesifikasi perangkat praktikan. Sehingga dalam testing, hampir di tiap iterasi, terlihat lonjakan penggunaan CPU di masing-masing worker yang mencapai 100%.

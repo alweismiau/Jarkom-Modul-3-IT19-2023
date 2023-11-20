@@ -301,8 +301,8 @@ Jangan lupa untuk ```service nginx restart``` dan menambahkan symbolic-link ke `
 
 Jika dicoba untuk akses salah satu worker dengan ```lynx 10.73.3.1```, maka akan tampil seperti berikut:
 
-![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/4f79ef7f-6e4c-4f29-b93f-d6707854d511)
-(Gambar di atas di-capture dari cmd Windows)
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/3ce3a17d-702c-4e08-8935-f22bca95b920)
+
 
 # Soal 7
 > Kepala suku dari Bredt Region memberikan resource server sebagai berikut -> Lawine (4GB, 2vCPU, dan 80 GB SSD), Linie (2GB, 2vCPU, dan 50 GB SSD), Lugner (1GB, 1vCPU, dan 25 GB SSD). Aturlah agar Eisen dapat bekerja dengan maksimal, lalu lakukan testing dengan 1000. request dan 100 request/second.
@@ -432,19 +432,272 @@ Berikut adalah hasil testing dari tiap algoritma load-balancing dan analisis dar
 
 ![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/de294e7f-6fe8-4592-ab41-dfe70c061b00)
 
+### Analisa
+Untuk hasil benchmarking, dapat dilihat bahwa Algoritma Round robin dan Least Connection memiliki performa yang cukup bagus, tetapi diungguli oleh algoritma Least Connection.
+Karena dalam least connection, mengutamakan melimpahkan request ke worker yang memiliki beban paling sedikit/memiliki koneksi/request paling sedikit, dibandingkan dengan Round Robin yang membagi request secara merata.
 
 
-# Soal 9 
+# Soal 9
+> Dengan menggunakan algoritma Round Robin, lakukan testing dengan menggunakan 3 worker, 2 worker, dan 1 worker sebanyak 100 request dengan 10 request/second, kemudian tambahkan grafiknya pada grimoire
+
 ## Jawaban
+
+Untuk mengurangi worker yang bekerja dibawah load balancer Eisen, cukup comment row yang memiliki IP yang ingin dimatikan service nya. Disiapkan 3 konfigurasi berbeda, diikuti dengan hasil testing masing-masing pengaturan, seperti berikut:
+
+### Setup Round Robin 3 Worker
+```
+upstream workers {
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+...
+...
+```
+
+Hasil testing
+
+```
+Requests per second:    804.71 [#/sec] (mean)
+Time per request:       12.427 [ms] (mean)
+Time per request:       1.243 [ms] (mean, across all concurrent requests)
+Transfer rate:          598.56 [Kbytes/sec] received
+```
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/d9a7b27a-9ed4-4afa-bafc-eabee7481c93)
+
+
+### Setup Round Robin 2 Worker
+```
+upstream workers {
+        server 10.73.3.1;
+        server 10.73.3.2;
+#        server 10.73.3.3;
+}
+...
+...
+```
+
+Hasil testing
+
+```
+Requests per second:    878.92 [#/sec] (mean)
+Time per request:       11.378 [ms] (mean)
+Time per request:       1.138 [ms] (mean, across all concurrent requests)
+Transfer rate:          653.61 [Kbytes/sec] received
+```
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/ed5dbfbb-b0dd-4f86-9d31-8f83bb5c3ed4)
+
+
+### Setup Round Robin 1 Worker
+```
+upstream workers {
+        server 10.73.3.1;
+#        server 10.73.3.2;
+#        server 10.73.3.3;
+}
+...
+...
+```
+
+Hasil testing
+
+```
+Requests per second:    945.68 [#/sec] (mean)
+Time per request:       10.574 [ms] (mean)
+Time per request:       1.057 [ms] (mean, across all concurrent requests)
+Transfer rate:          703.72 [Kbytes/sec] received
+```
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/c80d7572-0e8e-4bd5-8482-e11788a733e5)
+
+
+Dari hasil percobaan, semakin sedikit worker yang bekerja, semakin banyak angka request per detik. Hal ini dikarenakan ketika salah satu worker mati, maka beban pekerjaan worker tersebut akan dilimpahkan ke worker lain yang sedang aktif sehingga angka request per detik menjadi lebih banyak dan berbanding terbalik dengan jumlah worker yang aktif meng-handle request.
 
 # Soal 10 
+> Selanjutnya coba tambahkan konfigurasi autentikasi di LB dengan dengan kombinasi username: “netics” dan password: “ajkyyy”, dengan yyy merupakan kode kelompok. Terakhir simpan file “htpasswd” nya di /etc/nginx/rahasisakita/
 ## Jawaban
+
+Untuk menambahkan autentikasi di Load Balancer Eisen, maka perlu bantuan htpasswd yang ada dalam package apache2-utils. Maka dari itu perlu untuk install package tersebut terlebih dahulu menggunakan command ```apt-get install apache2-utils```.
+
+Yang dapat dilakukan yaitu membuat file config autentikasi baru dengan command ```mkdir /etc/nginx/rahasiakita/ && htpasswd -c /etc/nginx/rahasiakita/.htpasswd netics```. Setelah dijalankan, di direktori yang berkaitan akan ada sebuah file .htpasswd dan berisi sbb:
+
+
+Untuk dapat menggunakan file tersebut sebagai pengaturan auth Load Balancer, perlu dilakukan konfigurasi pada ```granz.channel.it19.com```, menjadi:
+
+```
+upstream workers {
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+
+server {
+        listen 80;
+        listen 81;
+        listen 82;
+
+        server_name granz.channel.it19.com www.granz.channel.it19.com;
+
+        location / {
+                proxy_pass http://workers;
+                auth_basic "Restricted Access";
+                auth_basic_user_file /etc/nginx/rahasiakita/.htpasswd;
+        }
+}
+```
+
+Save lalu restart service nginx. Hasilnya adalah sbb:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/b4d0b25a-2aa9-44d2-8f58-7aba0b2bf6f6)
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/c80f705d-c9f0-4383-8356-72754e56d8c0)
+
+Jika akses tertolak akan diberi opsi untuk mengulang proses autentikasi seperti dibawah:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/9903cdf5-933d-4675-9a6a-1fa9d7bd08c7)
+
 
 # Soal 11
+> Lalu buat untuk setiap request yang mengandung /its akan di proxy passing menuju halaman https://www.its.ac.id
 ## Jawaban
 
+Untuk menyelesaikan soal nomor 11, diperlukan untuk menambah konfigurasi tambahan di file config nginx ```granz.channel.it19.com```, dengan menambahkan blok ```location ~ /its```, menjadi seperti berikut:
+
+```
+upstream workers {
+        server 10.73.3.1;
+        server 10.73.3.2;
+        server 10.73.3.3;
+}
+
+server {
+        listen 80;
+        listen 81;
+        listen 82;
+
+        server_name granz.channel.it19.com www.granz.channel.it19.com;
+
+        location ~ /its {
+                satisfy any;
+                allow all;
+
+                proxy_pass https://www.its.ac.id;
+                proxy_set_header Host www.its.ac.id;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location / {
+                proxy_pass http://workers;
+                auth_basic "Restricted Access";
+                auth_basic_user_file /etc/nginx/rahasiakita/.htpasswd;
+        }
+
+}
+```
+
+Selanjutnya, jika kita memasukkan request dengan akhiran atau selipan /its, maka akan menampilkan page sederhana dari ```www.its.ac.id``` seperti berikut:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/b60225e4-e5b3-4283-8937-ea6aaed1e968)
+
+
 # Soal 12
+> Selanjutnya LB ini hanya boleh diakses oleh client dengan IP 10.73.3.69, 10.73.3.70, 10.73.4.167, dan 10.73.4.168.
+
 ## Jawaban
+
+Untuk menyelesaikan soal nomor 12, perlu untuk kembali ke node DHCP Server Himmel untuk melakukan konfigurasi tambahan di ```/etc/dhcp/dhcpd.conf```:
+
+```
+option domain-name "example.org";
+option domain-name-servers nsl.example.org, ns2.example.org;
+
+default-lease-time 600;
+max-lease-time 7200;
+
+ddns-update-style none;
+
+# Switch3
+subnet 10.73.1.0 netmask 255.255.255.0 {}
+
+subnet 10.73.3.0 netmask 255.255.255.0 {
+    range 10.73.3.16 10.73.3.32;
+    range 10.73.3.64 10.73.3.80;
+    option routers 10.73.3.11;
+    option broadcast-address 10.73.3.255;
+    option domain-name-servers 10.73.1.3;
+    default-lease-time 180;
+    max-lease-time 5760;
+}
+
+# Switch4
+subnet 10.73.4.0 netmask 255.255.255.0 {
+    range 10.73.4.12 10.73.4.20;
+    range 10.73.4.160 10.73.4.168;
+    option routers 10.73.4.11;
+    option broadcast-address 10.73.4.255;
+    option domain-name-servers 10.73.1.3;
+    default-lease-time 720;
+    max-lease-time 5760;
+}
+
+host Sein {
+    hardware ethernet de:d3:2d:64:0c:c1;
+    fixed-address 10.73.4.167;
+}
+
+host Stark {
+    hardware ethernet 82:07:ae:96:5e:ce;
+    fixed-address 10.73.4.168;
+}
+
+host Revolte {
+    hardware ethernet 3e:97:65:c8:a7:a8;
+    fixed-address 10.73.3.69;
+}
+
+host Richter {
+    hardware ethernet 96:89:4b:76:78:31;
+    fixed-address 10.73.3.70;
+}
+```
+
+Lalu beralih ke Load Balancer Eisen lagi untuk menambahkan beberapa line ke dalam file config ```granz.channel.it19.com```:
+
+```
+...
+	location / {
+                proxy_pass http://workers;
+
+                allow 10.73.3.69;
+                allow 10.73.3.70;
+                allow 10.73.4.167;
+                allow 10.73.4.168;
+                deny all;
+
+                auth_basic "Restricted Access";
+                auth_basic_user_file /etc/nginx/rahasiakita/.htpasswd;
+        }
+...
+```
+
+Konfigurasi di atas hanya memperbolehkan akses yang spesifik dari 4 IP yang tertera, dan menolak selain akses dari 4 IP tersebut.
+
+Jika diterima akan masuk ke dalam landing page ```granz.channel.it19.com```, jika tertolak akan mendapat respon 403 Forbidden, seperti berikut:
+
+Jika akses diberikan maka akan keluar prompt username dan password seperti pada nomor 10 dan masuk ke halaman awal granz.channel.it19.com:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/b4d0b25a-2aa9-44d2-8f58-7aba0b2bf6f6)
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/c80f705d-c9f0-4383-8356-72754e56d8c0)
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/3ce3a17d-702c-4e08-8935-f22bca95b920)
+
+Jika akses tertolak:
+
+![image](https://github.com/alweismiau/Jarkom-Modul-3-IT19-2023/assets/112788819/e8dabe93-1afc-48c0-a3db-e98b831cb559)
+
 
 # Soal 13
 Kemudian praktikan disuruh untuk mengatur riegel.canyon.yyy.com. Semua data yang diperlukan, diatur pada Denken dan harus dapat diakses oleh Frieren, Flamme, dan Fern.
@@ -1002,4 +1255,5 @@ Gambaran htop saat melakukan testing:
 
 
 ## Analisis 19 dan 20
+Dari hasil beberapa iterasi testing yang telah dilakukan, perbedaan visual dari ketiganya hampir nihil. Terdapat asumsi bahwa hal tersebut karena kapasitas spesifikasi mesin induk kurang memadai untuk menjadi "server" sehingga saat dilakukan testing, hampir setiap kali akan menunjukkan CPU Usage di angka 100%. Solusi yang dapat dilakukan adalah dengan menggunakan mesin yang memiliki spesifikasi lebih update, sehingga perbedaan dan dampak performa yang dilakukan oleh tiap worker dapat diobservasi lebih lanjut.
 > Dalam kasus testing efisiensi pembagian beban kerja dengan algoritma dan spek yang telah ditentukan pada nomor 19 dan 20 seperti yang terlihat pada grafik ```htop``` tiap worker, penulis berasumsi bahwa hal yang membuat perubahan-perubahan variabel dan algoritma tidak terlihat signifikan dikarenakan keterbatasan spesifikasi perangkat praktikan. Sehingga dalam testing, hampir di tiap iterasi, terlihat lonjakan penggunaan CPU di masing-masing worker yang mencapai 100%.

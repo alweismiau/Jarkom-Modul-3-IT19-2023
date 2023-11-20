@@ -139,7 +139,15 @@ apt-get install mariadb-client -y
 ```
 - Worker PHP 
 ```
+echo 'nameserver 10.73.1.3
+nameserver 192.168.122.1' > /etc/resolv.conf
 
+apt-get update
+apt-get install nginx -y
+apt-get install php7.3-fpm -y
+apt-get install apache2-utils -y
+apt-get install wget -y
+apt-get install unzip
 ```
 - Client 
 ```
